@@ -1,0 +1,36 @@
+# Merge ratings with POI metadata
+user_profile_df = pd.merge(ratings_df, pois_df, on='poi_id')
+
+# TF-IDF Vectorizer on POI descriptions
+tfidf = TfidfVectorizer(stop_words='english')
+tfidf_matrix = tfidf.fit_transform(pois_df['description'])
+
+# Build user profile based on content they've interacted with
+def get_content_recommendations(user_id, top_n=2):
+    user_data = user_profile_df[user_profile_df['user_id'] == user_id]
+    user_rated_pois = user_data['poi_id'].tolist()
+    user_ratings = user_data['rating'].values
+    user_descriptions = user_data['description']
+
+    user_tfidf = tfidf.transform(user_descriptions)
+    user_profile = np.average(user_tfidf.toarray(), axis=0, weights=user_ratings)
+
+    cosine_sim = cosine_similarity([user_profile], tfidf_matrix).flatten()
+
+    poi_scores = list(enumerate(cosine_sim))
+    poi_scores = sorted(poi_scores, key=lambda x: x[1], reverse=True)
+
+    recommendations = []
+    for idx, score in poi_scores:
+        poi_id = pois_df.iloc[idx]['poi_id']
+        if poi_id not in user_rated_pois:
+            recommendations.append((pois_df.iloc[idx]['name'], score))
+        if len(recommendations) >= top_n:
+            break
+    return recommendations
+
+# Show content-based recommendations
+content_recs = get_content_recommendations('U1', top_n=3)
+print("\nContent-Based Filtering Recommendations for U1:")
+for name, score in content_recs:
+    print(f"{name} (Similarity Score: {score:.2f})")
